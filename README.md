@@ -1,5 +1,5 @@
-QuizForge
-QuizForge is an AI-powered quiz application built to make creating and practicing quizzes easier. It combines a Laravel application with AI-assisted question generation and tools for validating quiz content.
+laravel-ai-quiz-engine
+laravel-ai-quiz-engine is an AI-powered quiz application built to make creating and practicing quizzes easier. It combines a Laravel application with AI-assisted question generation and tools for validating quiz content.
 Features
 - AI-assisted question generation to help create quiz questions.
 - Question processing and validation to support consistent quiz content.
