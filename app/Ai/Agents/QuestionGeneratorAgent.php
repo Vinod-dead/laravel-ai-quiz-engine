@@ -13,9 +13,9 @@ use Laravel\Ai\Contracts\HasStructuredOutput;
 use Laravel\Ai\Promptable;
 use Stringable;
 
-#[Model('qwen3:8b')]
-#[MaxTokens(8192)]
-#[Temperature(0.7)]
+#[Model('llama3.2:latest')]
+#[MaxTokens(3072)]
+#[Temperature(0.2)]
 #[Timeout(180)]
 class QuestionGeneratorAgent implements Agent, HasStructuredOutput
 {
@@ -28,12 +28,10 @@ class QuestionGeneratorAgent implements Agent, HasStructuredOutput
         private readonly int $difficulty,
     ) {}
 
-    /**
-     * Get the instructions that the agent should follow.
-     */
     public function instructions(): Stringable|string
     {
         $typeLabel = QuestionType::from($this->type)->label();
+
         $difficultyLabel = match ($this->difficulty) {
             1 => 'very easy (beginner)',
             2 => 'easy',
@@ -44,29 +42,32 @@ class QuestionGeneratorAgent implements Agent, HasStructuredOutput
         };
 
         $optionsNote = QuestionType::from($this->type)->hasOptions()
-            ? 'Each question must include an "options" array of 4 distinct answer choices. For True/False questions, options must be exactly ["True", "False"].'
-            : 'Leave "options" as an empty array [] since this is a short answer question.';
+            ? 'Provide exactly 4 distinct answer choices for each question. For True/False, use exactly ["True", "False"].'
+            : 'For short-answer questions, use an empty options array.';
 
         return <<<INSTRUCTIONS
-        You are an expert exam author creating high-quality assessment questions.
+You are an exam-question generator.
 
-        Generate exactly {$this->count} {$typeLabel} question(s) about the topic: "{$this->topic}".
-        Difficulty level: {$difficultyLabel}.
+Create exactly {$this->count} {$typeLabel} question(s).
+Topic: {$this->topic}
+Difficulty: {$difficultyLabel} (level {$this->difficulty}).
 
-        Rules:
-        - Each question must be clear, unambiguous, and test genuine understanding.
-        - The correct_answer must match one of the options exactly (case-sensitive) for multiple choice and true/false.
-        - Never embed the correct answer in the question text itself.
-        - The explanation should clarify why the correct answer is right.
-        - Difficulty must be {$this->difficulty} (1=easiest, 5=hardest).
-        - {$optionsNote}
-        - Respond ONLY with the JSON schema. No extra text.
-        INSTRUCTIONS;
+Return only one JSON object with a "questions" array.
+Each question must contain:
+- question: a clear question string
+- type: a string
+- options: an array of strings
+- correct_answer: a string
+- explanation: one short sentence
+- difficulty: the integer {$this->difficulty}
+
+{$optionsNote}
+
+For multiple-choice and True/False questions, correct_answer must exactly match one option.
+Keep questions and explanations concise. Do not use Markdown or text outside the JSON.
+INSTRUCTIONS;
     }
 
-    /**
-     * Get the agent's structured output schema definition.
-     */
     public function schema(JsonSchema $schema): array
     {
         return [
@@ -75,10 +76,15 @@ class QuestionGeneratorAgent implements Agent, HasStructuredOutput
                     $schema->object([
                         'question' => $schema->string()->required(),
                         'type' => $schema->string()->required(),
-                        'options' => $schema->array()->items($schema->string()),
+                        'options' => $schema->array()
+                            ->items($schema->string())
+                            ->required(),
                         'correct_answer' => $schema->string()->required(),
                         'explanation' => $schema->string()->required(),
-                        'difficulty' => $schema->integer()->min(1)->max(5)->required(),
+                        'difficulty' => $schema->integer()
+                            ->min(1)
+                            ->max(5)
+                            ->required(),
                     ])
                 )
                 ->required(),

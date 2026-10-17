@@ -1,5 +1,8 @@
+
 <?php
 
+use App\Models\AiGenerationBatch;
+use App\Jobs\GenerateAiQuestionsBatchJob;
 use App\Ai\Agents\QuestionGeneratorAgent;
 use App\Ai\ResolvedProviders;
 use App\Enums\QuestionType;
@@ -9,6 +12,7 @@ use App\Models\Exam;
 use App\Models\Question;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Validate;
@@ -20,7 +24,7 @@ new #[Title('Manage Questions')] class extends Component {
 
     public Exam $exam;
 
-    // --- Manual form ---
+    // Manual question form
     public bool $showForm = false;
     public ?int $editingId = null;
     public string $question = '';
@@ -30,7 +34,7 @@ new #[Title('Manage Questions')] class extends Component {
     /** @var array<int, string> */
     public array $options = ['', '', '', ''];
 
-    // --- AI generation panel ---
+    // AI generation panel
     public bool $showAiPanel = false;
 
     #[Validate('required|string|max:200')]
@@ -44,21 +48,23 @@ new #[Title('Manage Questions')] class extends Component {
     #[Validate('required|integer|min:1|max:5')]
     public int $aiDifficulty = 3;
 
-    // --- CSV Import ---
+    public bool $aiGenerating = false;
+    public string $aiError = '';
+    public ?int $aiGenerationBatchId = null;
+    public string $aiGenerationStatus = '';
+
+    /** @var array<int, array<string, mixed>> */
+    public array $pendingAiQuestions = [];
+
+    // CSV import
     #[Validate('file|mimes:csv,txt|max:512')]
     public mixed $csvFile = null;
 
-    // --- Bulk selection ---
+    // Bulk selection
     /** @var array<int, int> */
     public array $selectedQuestions = [];
 
     public bool $selectAll = false;
-
-    public bool $aiGenerating = false;
-    public string $aiError = '';
-
-    /** @var array<int, array<string, mixed>> */
-    public array $pendingAiQuestions = [];
 
     public function mount(): void
     {
@@ -81,6 +87,8 @@ new #[Title('Manage Questions')] class extends Component {
 
     public function editQuestion(Question $question): void
     {
+        abort_unless($question->exam_id === $this->exam->id, 403);
+
         $this->editingId = $question->id;
         $this->question = $question->question;
         $this->type = $question->type->value;
@@ -93,39 +101,55 @@ new #[Title('Manage Questions')] class extends Component {
     public function saveQuestion(): void
     {
         $rules = [
-            'question'       => 'required|string|max:1000',
-            'type'           => 'required|string|in:'.implode(',', array_column(QuestionType::cases(), 'value')),
+            'question' => 'required|string|max:1000',
+            'type' => 'required|string|in:'.implode(
+                ',',
+                array_column(QuestionType::cases(), 'value')
+            ),
             'correct_answer' => 'required|string|max:500',
         ];
 
         if (QuestionType::from($this->type)->hasOptions()) {
-            $rules['options']   = 'required|array|min:2';
+            $rules['options'] = 'required|array|min:2';
             $rules['options.*'] = 'required|string|max:500';
         }
 
         $this->validate($rules);
 
         $data = [
-            'question'       => $this->question,
-            'type'           => $this->type,
+            'question' => $this->question,
+            'type' => $this->type,
             'correct_answer' => $this->correct_answer,
-            'options'        => QuestionType::from($this->type)->hasOptions() ? array_values(array_filter($this->options)) : null,
+            'options' => QuestionType::from($this->type)->hasOptions()
+                ? array_values(array_filter($this->options))
+                : null,
         ];
 
         if ($this->editingId) {
-            Question::findOrFail($this->editingId)->update($data);
+            Question::query()
+                ->where('exam_id', $this->exam->id)
+                ->findOrFail($this->editingId)
+                ->update($data);
         } else {
-            $order = $this->exam->questions()->max('order') + 1;
-            $this->exam->questions()->create([...$data, 'order' => $order]);
+            $order = ($this->exam->questions()->max('order') ?? 0) + 1;
+
+            $this->exam->questions()->create([
+                ...$data,
+                'order' => $order,
+            ]);
         }
 
         $this->resetForm();
+        unset($this->questions);
     }
 
     public function deleteQuestion(Question $question): void
     {
         abort_unless($question->exam_id === $this->exam->id, 403);
+
         $question->delete();
+
+        unset($this->questions);
     }
 
     public function updatedSelectAll(): void
@@ -148,10 +172,17 @@ new #[Title('Manage Questions')] class extends Component {
 
         $this->selectedQuestions = [];
         $this->selectAll = false;
+
         unset($this->questions);
 
         $this->modal('confirm-bulk-delete')->close();
-        $this->dispatch('toast', variant: 'success', heading: 'Deleted', text: "{$count} question(s) deleted.");
+
+        $this->dispatch(
+            'toast',
+            variant: 'success',
+            heading: 'Deleted',
+            text: "{$count} question(s) deleted."
+        );
     }
 
     public function cancel(): void
@@ -177,116 +208,143 @@ new #[Title('Manage Questions')] class extends Component {
 
         $this->modal('csv-import')->close();
 
-        $this->dispatch('toast', variant: 'success', heading: 'Import complete', text: 'CSV questions have been imported.');
+        $this->dispatch(
+            'toast',
+            variant: 'success',
+            heading: 'Import complete',
+            text: 'CSV questions have been imported.'
+        );
     }
 
     /**
-     * Queued generation path — used for batches > 5.
-     * Also kept for backward-compat with existing tests.
+     * Legacy generation method retained for compatibility.
      */
     public function generateWithAi(): void
     {
+        $this->aiError = 'Please use the background AI generation workflow.';
+    }
+
+    /**
+     * Create a persistent batch and dispatch background generation.
+     */
+    public function streamGenerateWithAi(): void
+    {
+        if ($this->aiGenerating) {
+            return;
+        }
+
         if (Cache::has('ai_budget_exceeded:'.auth()->id())) {
             $this->aiError = 'Daily AI budget exceeded. Please try again tomorrow.';
-
             return;
         }
 
-        if (! RateLimiter::attempt('ai:'.auth()->id(), config('ai.rate_limit.per_minute', 30), fn () => true)) {
+        if (! RateLimiter::attempt(
+            'ai:'.auth()->id(),
+            config('ai.rate_limit.per_minute', 30),
+            fn () => true
+        )) {
             $this->aiError = 'Too many AI requests. Please wait a moment.';
-
             return;
         }
 
-        $this->validateOnly('aiTopic');
-        $this->validateOnly('aiCount');
-        $this->validateOnly('aiDifficulty');
+        $this->validate([
+            'aiTopic' => 'required|string|max:200',
+            'aiType' => 'required|string|in:'.implode(
+                ',',
+                array_column(QuestionType::cases(), 'value')
+            ),
+            'aiCount' => 'required|integer|min:1|max:10',
+            'aiDifficulty' => 'required|integer|min:1|max:5',
+        ]);
 
         $this->aiError = '';
-        $this->aiGenerating = true;
         $this->pendingAiQuestions = [];
+        $this->aiGenerationBatchId = null;
+        $this->aiGenerationStatus = '';
+
+        $batch = AiGenerationBatch::create([
+            'exam_id' => $this->exam->id,
+            'user_id' => auth()->id(),
+            'topic' => $this->aiTopic,
+            'question_type' => $this->aiType,
+            'question_count' => $this->aiCount,
+            'difficulty' => $this->aiDifficulty,
+            'status' => 'pending',
+        ]);
+
+        $this->aiGenerationBatchId = $batch->id;
+        $this->aiGenerationStatus = 'pending';
+        $this->aiGenerating = true;
 
         try {
-            $agent = new QuestionGeneratorAgent(
-                topic: $this->aiTopic,
-                type: $this->aiType,
-                count: $this->aiCount,
-                difficulty: $this->aiDifficulty,
-            );
+            GenerateAiQuestionsBatchJob::dispatch($batch->id);
+        } catch (\Throwable $exception) {
+            Log::error('Failed to dispatch AI generation batch.', [
+                'batch_id' => $batch->id,
+                'exception' => $exception->getMessage(),
+            ]);
 
-            $examId = $this->exam->id;
+            $batch->update([
+                'status' => 'failed',
+                'error_message' => 'Could not start AI generation. Please try again.',
+            ]);
 
-            $agent->queue(
-                "Generate {$this->aiCount} questions about {$this->aiTopic}.",
-                provider: ResolvedProviders::list(),
-            )->then(function ($response) use ($examId) {
-                $data = json_decode($response->text, true);
-                ProcessGeneratedQuestionsJob::dispatch(
-                    $examId,
-                    $data['questions'] ?? [],
-                );
-            });
-
-            $this->dispatch('toast', heading: 'Queued', text: "Generating {$this->aiCount} questions in the background. Refresh in a moment.");
-        } catch (\Throwable $e) {
-            logger()->error('AI generation failed', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
-            $this->aiError = 'AI generation failed. Please try again or add questions manually.';
-        } finally {
             $this->aiGenerating = false;
+            $this->aiGenerationStatus = 'failed';
+            $this->aiError = 'Could not start AI generation. Please try again.';
         }
     }
 
     /**
-     * Synchronous generation path — uses prompt() instead of stream() because
-     * QuestionGeneratorAgent uses HasStructuredOutput which does not support
-     * streaming on all providers (e.g. Gemini).
+     * Poll the database for the current batch's status.
      */
-    public function streamGenerateWithAi(): void
+    public function checkAiGenerationStatus(): void
     {
-        if (Cache::has('ai_budget_exceeded:'.auth()->id())) {
-            $this->aiError = 'Daily AI budget exceeded. Please try again tomorrow.';
-
+        if (! $this->aiGenerating || ! $this->aiGenerationBatchId) {
             return;
         }
 
-        if (! RateLimiter::attempt('ai:'.auth()->id(), config('ai.rate_limit.per_minute', 30), fn () => true)) {
-            $this->aiError = 'Too many AI requests. Please wait a moment.';
+        $batch = AiGenerationBatch::query()
+            ->whereKey($this->aiGenerationBatchId)
+            ->where('exam_id', $this->exam->id)
+            ->where('user_id', auth()->id())
+            ->first();
 
-            return;
-        }
-
-        $this->validateOnly('aiTopic');
-        $this->validateOnly('aiCount');
-        $this->validateOnly('aiDifficulty');
-
-        $this->aiError = '';
-        $this->aiGenerating = true;
-        $this->pendingAiQuestions = [];
-
-        try {
-            $agent = new QuestionGeneratorAgent(
-                topic: $this->aiTopic,
-                type: $this->aiType,
-                count: $this->aiCount,
-                difficulty: $this->aiDifficulty,
-            );
-
-            $response = $agent->prompt(
-                "Generate {$this->aiCount} questions about {$this->aiTopic}.",
-                provider: ResolvedProviders::list(),
-            );
-
-            $data = json_decode($response->text, true);
-            $this->pendingAiQuestions = $data['questions'] ?? [];
-
-            if (count($this->pendingAiQuestions) > 0) {
-                $this->saveToHistory();
-            }
-        } catch (\Throwable $e) {
-            logger()->error('AI generation failed', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
-            $this->aiError = 'AI generation failed. Please try again or add questions manually.';
-        } finally {
+        if (! $batch) {
             $this->aiGenerating = false;
+            $this->aiGenerationStatus = 'failed';
+            $this->aiError = 'Generation batch not found. Please try again.';
+            return;
+        }
+
+        $this->aiGenerationStatus = $batch->status;
+
+        if (in_array($batch->status, ['pending', 'processing'], true)) {
+            return;
+        }
+
+        // Stop the spinner for every terminal status.
+        $this->aiGenerating = false;
+
+        if ($batch->status === 'completed') {
+            $this->pendingAiQuestions = $batch->questions ?? [];
+
+            if ($this->pendingAiQuestions === []) {
+                $this->aiError = 'Generation completed, but no questions were returned.';
+                return;
+            }
+
+            $this->aiTopic = $batch->topic;
+            $this->aiType = $batch->question_type;
+
+            $this->saveToHistory();
+
+            return;
+        }
+
+        if ($batch->status === 'failed') {
+            $this->aiError = $batch->error_message
+                ?: 'AI question generation failed. Please try again.';
         }
     }
 
@@ -294,51 +352,70 @@ new #[Title('Manage Questions')] class extends Component {
     {
         $data = $this->pendingAiQuestions[$index] ?? null;
 
-        if (! $data) {
+        if (! is_array($data)) {
             return;
         }
 
-        $type  = QuestionType::tryFrom($data['type'] ?? '') ?? QuestionType::ShortAnswer;
-        $order = $this->exam->questions()->max('order') + 1;
+        $type = QuestionType::tryFrom($data['type'] ?? '');
+
+        if (! $type) {
+            $this->aiError = 'This generated question has an unsupported type.';
+            return;
+        }
+
+        $order = ($this->exam->questions()->max('order') ?? 0) + 1;
 
         $this->exam->questions()->create([
-            'question'       => $data['question'],
-            'type'           => $type->value,
-            'options'        => $type->hasOptions() && ! empty($data['options']) ? $data['options'] : null,
+            'question' => $data['question'],
+            'type' => $type->value,
+            'options' => $type->hasOptions() && ! empty($data['options'])
+                ? $data['options']
+                : null,
             'correct_answer' => $data['correct_answer'],
-            'order'          => $order,
+            'order' => $order,
         ]);
 
         unset($this->pendingAiQuestions[$index]);
+
         $this->pendingAiQuestions = array_values($this->pendingAiQuestions);
+
+        unset($this->questions);
     }
 
     public function confirmAllAiQuestions(): void
     {
-        $nextOrder = $this->exam->questions()->max('order') + 1;
+        $nextOrder = ($this->exam->questions()->max('order') ?? 0) + 1;
 
         foreach ($this->pendingAiQuestions as $data) {
-            $type = QuestionType::tryFrom($data['type'] ?? '') ?? QuestionType::ShortAnswer;
+            $type = QuestionType::tryFrom($data['type'] ?? '');
+
+            if (! $type) {
+                continue;
+            }
 
             $this->exam->questions()->create([
-                'question'       => $data['question'],
-                'type'           => $type->value,
-                'options'        => $type->hasOptions() && ! empty($data['options']) ? $data['options'] : null,
+                'question' => $data['question'],
+                'type' => $type->value,
+                'options' => $type->hasOptions() && ! empty($data['options'])
+                    ? $data['options']
+                    : null,
                 'correct_answer' => $data['correct_answer'],
-                'order'          => $nextOrder++,
+                'order' => $nextOrder++,
             ]);
         }
 
         $this->pendingAiQuestions = [];
+
+        unset($this->questions);
     }
 
     public function discardAiQuestion(int $index): void
     {
         unset($this->pendingAiQuestions[$index]);
+
         $this->pendingAiQuestions = array_values($this->pendingAiQuestions);
     }
 
-    /** Re-populate pendingAiQuestions from a previous generation batch stored in session. */
     public function loadFromHistory(int $index): void
     {
         $history = session("ai_gen_history_{$this->exam->id}", []);
@@ -348,8 +425,8 @@ new #[Title('Manage Questions')] class extends Component {
         }
 
         $this->pendingAiQuestions = $history[$index]['questions'];
-        $this->aiTopic            = $history[$index]['topic'];
-        $this->aiType             = $history[$index]['type'];
+        $this->aiTopic = $history[$index]['topic'];
+        $this->aiType = $history[$index]['type'];
     }
 
     #[Computed]
@@ -370,28 +447,22 @@ new #[Title('Manage Questions')] class extends Component {
         return QuestionType::from($this->type)->hasOptions();
     }
 
-    /**
-     * Last 5 generation batches for this exam, keyed in session.
-     *
-     * @return array<int, array<string, mixed>>
-     */
     #[Computed]
     public function aiHistory(): array
     {
         return session("ai_gen_history_{$this->exam->id}", []);
     }
 
-    /** Persist the latest batch to session history (max 5 entries per exam). */
     private function saveToHistory(): void
     {
-        $key     = "ai_gen_history_{$this->exam->id}";
+        $key = "ai_gen_history_{$this->exam->id}";
         $history = session($key, []);
 
         array_unshift($history, [
-            'topic'        => $this->aiTopic,
-            'type'         => $this->aiType,
-            'count'        => count($this->pendingAiQuestions),
-            'questions'    => $this->pendingAiQuestions,
+            'topic' => $this->aiTopic,
+            'type' => $this->aiType,
+            'count' => count($this->pendingAiQuestions),
+            'questions' => $this->pendingAiQuestions,
             'generated_at' => now()->format('H:i'),
         ]);
 
@@ -400,15 +471,19 @@ new #[Title('Manage Questions')] class extends Component {
 
     private function resetForm(): void
     {
-        $this->showForm     = false;
-        $this->editingId    = null;
-        $this->question     = '';
-        $this->type         = QuestionType::MultipleChoice->value;
+        $this->showForm = false;
+        $this->editingId = null;
+        $this->question = '';
+        $this->type = QuestionType::MultipleChoice->value;
         $this->correct_answer = '';
-        $this->options      = ['', '', '', ''];
+        $this->options = ['', '', '', ''];
+
         $this->resetValidation();
     }
 }; ?>
+
+
+
 
 <div class="flex flex-col gap-6">
     <div class="flex items-center justify-between">
@@ -445,13 +520,20 @@ new #[Title('Manage Questions')] class extends Component {
     {{-- ── AI Generation Panel ── --}}
     @if ($showAiPanel)
         <div
-            class="bento-flat space-y-4"
-            x-data="{ generating: $wire.$entangle('aiGenerating') }"
-        >
-            <div class="flex items-center gap-2">
-                <flux:icon.sparkles class="text-teal-600 size-5" />
-                <flux:heading size="lg">Generate Questions with AI</flux:heading>
-            </div>
+    class="bento-flat space-y-4"
+    wire:poll.3s="checkAiGenerationStatus"
+    x-data="{ generating: $wire.$entangle('aiGenerating') }"
+>
+            <div class="space-y-1">
+    <div class="flex items-center gap-2">
+        <flux:icon.sparkles class="text-teal-600 size-5" />
+        <flux:heading size="lg">Generate Questions with AI</flux:heading>
+    </div>
+
+    <flux:description>
+        Generates in the background. Review suggestions before adding them.
+    </flux:description>
+</div>
 
             @if ($aiError)
                 <flux:callout variant="danger" icon="x-circle" heading="{{ $aiError }}" />

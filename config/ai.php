@@ -1,3 +1,4 @@
+
 <?php
 
 return [
@@ -6,40 +7,19 @@ return [
     |--------------------------------------------------------------------------
     | Default AI Provider Names
     |--------------------------------------------------------------------------
-    |
-    | Here you may specify which of the AI providers below should be the
-    | default for AI operations when no explicit provider is provided
-    | for the operation. This should be any provider defined below.
-    |
     */
 
-    'default' => 'ollama', // Priority: anthropic → gemini → openai → ollama (local dev)
+    'default' => 'ollama',
     'default_for_images' => 'gemini',
     'default_for_audio' => 'openai',
     'default_for_transcription' => 'openai',
-    'default_for_embeddings' => 'openai',
+    'default_for_embeddings' => 'ollama',
     'default_for_reranking' => 'cohere',
 
     /*
     |--------------------------------------------------------------------------
     | Caching
     |--------------------------------------------------------------------------
-    |
-    | Below you may configure caching strategies for AI related operations
-    | such as embedding generation. You are free to adjust these values
-    | based on your application's available caching stores and needs.
-    |
-    */
-
-    /*
-    |--------------------------------------------------------------------------
-    | Rate Limiting & Cost Controls
-    |--------------------------------------------------------------------------
-    |
-    | Configure per-user AI rate limits and daily spending budgets.
-    | When the daily budget is exceeded, a cache flag is set to block
-    | further AI calls until the next day.
-    |
     */
 
     'rate_limit' => [
@@ -64,11 +44,6 @@ return [
     |--------------------------------------------------------------------------
     | AI Providers
     |--------------------------------------------------------------------------
-    |
-    | Below are each of your AI providers defined for this application. Each
-    | represents an AI provider and API key combination which can be used
-    | to perform tasks like text, image, and audio creation via agents.
-    |
     */
 
     'providers' => [
@@ -125,11 +100,17 @@ return [
             'driver' => 'ollama',
             'key' => env('OLLAMA_API_KEY', ''),
             'url' => env('OLLAMA_BASE_URL', 'http://localhost:11434'),
+
             'models' => [
                 'text' => [
                     'default' => env('OLLAMA_MODEL', 'qwen3:8b'),
                     'cheapest' => env('OLLAMA_MODEL', 'qwen3:8b'),
                     'smartest' => env('OLLAMA_MODEL_SMART', 'qwen2.5-coder:14b'),
+                ],
+
+                'embeddings' => [
+                    'default' => env('OLLAMA_EMBEDDING_MODEL', 'nomic-embed-text'),
+                    'dimensions' => 768,
                 ],
             ],
         ],

@@ -1,0 +1,92 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261017161741
+Username: VINODREDDY\VINOD
+RunAs User: VINODREDDY\VINOD
+Configuration Name: 
+Machine: VINODREDDY (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -noexit -command try { . "c:\Users\VINOD\AppData\Local\Programs\Microsoft VS Code\2a59476c9b\resources\app\out\vs\workbench\contrib\terminal\common\scripts\shellIntegration.ps1" } catch {}
+Process ID: 37600
+PSVersion: 5.1.26100.9444
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9444
+BuildVersion: 10.0.26100.9444
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Transcript started, output file is .\remaining-checks-20261017-161740.txt
+
+=== 1. PHP VERSION ===
+
+
+=== 2. EXISTING TEST FILES ===
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Pest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\TestCase.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\AiQuestionsWorkflowTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\AiUsageTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\BroadcastingTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\BulkDeleteQuestionsTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\DashboardTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\ExamCrudTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\ExampleTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\ExamTimerTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\PdfDownloadControllerTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\PdfExportTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\PgvectorSetupTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\ProcessGeneratedQuestionsJobTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\ProcessGeneratedQuestionsJobTest.php.bak
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\ReviewLaterTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\RoleMiddlewareTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\StudentAttemptHistoryTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\StudentDashboardStatsTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\StudentExamTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\StudentProgressChartTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\UiEnhancementsTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\Ai\AutoGraderTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\Ai\EmbeddingGenerationTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\Ai\HintTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\Ai\QuestionGeneratorStreamTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\Ai\QuestionGeneratorTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\Ai\RecommendationsTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\Ai\SimilaritySearchTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\Auth\AuthenticationTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\Auth\EmailVerificationTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\Auth\PasswordConfirmationTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\Auth\PasswordResetTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\Auth\RegistrationTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\Auth\TwoFactorChallengeTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\Settings\ProfileUpdateTest.php
+C:\Users\VINOD\Downloads\laravel-ai-quiz-engine-main\laravel-ai-quiz-engine-main\tests\Feature\Settings\SecurityTest.php
+
+=== 3. PHP SYNTAX CHECKS ===
+
+Checking .\app\Jobs\GenerateAiQuestionsBatchJob.php
+
+
+Checking .\app\Services\QuestionSimilarityService.php
+
+
+=== 4. LARAVEL TEST SUITE ===
+
+
+=== 5. MIGRATION STATUS (READ ONLY) ===
+
+
+=== 6. ROUTE LIST ===
+
+
+=== 7. OLLAMA STATUS ===
+nomic-embed-text:latest
+qwen3:8b
+llama3.2:latest
+
+=== 8. GIT CHANGE SUMMARY ===
+
+
+
+**********************
+Windows PowerShell transcript end
+End time: 20261017162029
+**********************
